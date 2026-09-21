@@ -2,3 +2,4 @@ fastapi
 uvicorn
 instaloader
 python-dotenv
+supabase
