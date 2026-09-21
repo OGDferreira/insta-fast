@@ -6,8 +6,13 @@ import uuid
 
 import instaloader
 from dotenv import load_dotenv
-from fastapi import APIRouter, BackgroundTasks
-from instaloader.exceptions import BadCredentialsException, ConnectionException
+from fastapi import APIRouter, BackgroundTasks, HTTPException, status
+from instaloader.exceptions import (
+    BadCredentialsException,
+    ConnectionException,
+    LoginException,
+    TwoFactorAuthRequiredException,
+)
 from pydantic import BaseModel, Field
 from supabase import create_client
 
@@ -18,13 +23,17 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+class LoginRequest(BaseModel):
+    username: str = Field(min_length=1)
+    password: str = Field(min_length=1)
+
+
 class DownloadRequest(BaseModel):
     target_profile: str = Field(min_length=1)
     scraper_username: str = Field(min_length=1)
-    scraper_password: str = Field(min_length=1)
 
 
-def process_download(request: DownloadRequest) -> None:
+def process_download(loader: instaloader.Instaloader, request: DownloadRequest) -> None:
     temporary_directory: str | None = None
     archive_path: str | None = None
 
@@ -41,9 +50,7 @@ def process_download(request: DownloadRequest) -> None:
             return
 
         temporary_directory = tempfile.mkdtemp(prefix="insta-fast-")
-        loader = instaloader.Instaloader()
         loader.dirname_pattern = os.path.join(temporary_directory, "{target}")
-        loader.login(request.scraper_username, request.scraper_password)
         loader.download_profile(
             target_profile,
             profile_pic=True,
@@ -74,8 +81,6 @@ def process_download(request: DownloadRequest) -> None:
             )
 
         logger.info("Download de %s enviado ao Supabase em %s", target_profile, object_path)
-    except BadCredentialsException:
-        logger.exception("Credenciais inválidas para a conta de scraping")
     except ConnectionException:
         logger.exception("Falha de conexão ou bloqueio durante o scraping")
     except Exception:
@@ -98,12 +103,58 @@ def process_download(request: DownloadRequest) -> None:
                 logger.exception("Não foi possível remover o diretório temporário")
 
 
+@router.post("/api/login")
+def login(request: LoginRequest) -> dict[str, str]:
+    loader = instaloader.Instaloader()
+
+    try:
+        loader.login(request.username, request.password)
+        loader.save_session_to_file()
+    except TwoFactorAuthRequiredException as error:
+        logger.warning("Autenticação de dois fatores exigida para %s", request.username)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="A conta exige autenticação de dois fatores.",
+        ) from error
+    except (BadCredentialsException, LoginException) as error:
+        logger.warning("Falha de login para %s", request.username)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Usuário ou senha inválidos.",
+        ) from error
+    except ConnectionException as error:
+        logger.exception("Falha de conexão ao fazer login")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Não foi possível conectar ao Instagram.",
+        ) from error
+
+    return {"status": "success", "message": "Sessão salva com sucesso!"}
+
+
 @router.post("/api/download")
 def download_profile(
     request: DownloadRequest,
     background_tasks: BackgroundTasks,
 ) -> dict[str, str]:
-    background_tasks.add_task(process_download, request)
+    loader = instaloader.Instaloader()
+
+    try:
+        loader.load_session_from_file(request.scraper_username)
+    except (FileNotFoundError, OSError) as error:
+        logger.info("Sessão não encontrada para %s", request.scraper_username)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Sessão não encontrada. Faça o login manual novamente.",
+        ) from error
+    except LoginException as error:
+        logger.warning("Sessão inválida para %s", request.scraper_username)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Sessão inválida. Faça o login manual novamente.",
+        ) from error
+
+    background_tasks.add_task(process_download, loader, request)
     return {
         "status": "processing",
         "message": "Download iniciado em segundo plano.",

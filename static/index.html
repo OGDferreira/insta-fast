@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#080b18">
+  <title>Insta Fast | Secure Scraper</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #080b18;
+      --panel: rgba(17, 22, 43, .72);
+      --line: rgba(166, 180, 255, .17);
+      --muted: #8c96b7;
+      --text: #f5f7ff;
+      --accent: #9f7aea;
+      --cyan: #63e6e2;
+      --danger: #ff8da1;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--text);
+      background: var(--bg);
+      font-family: "DM Sans", sans-serif;
+      overflow-x: hidden;
+    }
+    body::before, body::after {
+      content: "";
+      position: fixed;
+      z-index: -1;
+      width: 42vw;
+      height: 42vw;
+      border-radius: 50%;
+      filter: blur(80px);
+      opacity: .3;
+      animation: drift 14s ease-in-out infinite alternate;
+    }
+    body::before { background: #7239c5; top: -18vw; left: -10vw; }
+    body::after { background: #167eaa; right: -16vw; bottom: -18vw; animation-delay: -5s; }
+    .noise {
+      position: fixed; inset: 0; z-index: -1; opacity: .035; pointer-events: none;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.7'/%3E%3C/svg%3E");
+    }
+    .shell { width: min(100% - 40px, 520px); margin: 0 auto; padding: 7vh 0 48px; }
+    .brand { display: flex; gap: 12px; align-items: center; margin-bottom: 28px; }
+    .brand-mark { display: grid; place-items: center; width: 42px; height: 42px; border: 1px solid rgba(159,122,234,.55); border-radius: 13px; background: linear-gradient(135deg, rgba(159,122,234,.35), rgba(99,230,226,.18)); box-shadow: 0 0 26px rgba(159,122,234,.28); font-size: 21px; }
+    .brand-name { font: 700 20px "Space Grotesk", sans-serif; letter-spacing: -.5px; }
+    .brand-name span { color: var(--cyan); }
+    .eyebrow { color: var(--cyan); font-size: 11px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; }
+    h1 { margin: 8px 0 10px; font: 700 clamp(32px, 8vw, 48px)/1.04 "Space Grotesk", sans-serif; letter-spacing: -2px; }
+    .subtitle { margin: 0 0 26px; color: var(--muted); font-size: 15px; line-height: 1.55; }
+    .card { border: 1px solid var(--line); border-radius: 25px; padding: 28px; background: var(--panel); box-shadow: 0 24px 80px rgba(0,0,0,.28), inset 0 1px rgba(255,255,255,.05); backdrop-filter: blur(24px); }
+    .steps { display: flex; gap: 9px; margin-bottom: 27px; }
+    .step { display: flex; align-items: center; gap: 7px; color: #656e91; font-size: 12px; font-weight: 600; }
+    .step b { display: grid; place-items: center; width: 25px; height: 25px; border: 1px solid var(--line); border-radius: 50%; font-size: 11px; }
+    .step.active { color: var(--text); } .step.active b { border-color: var(--cyan); color: var(--cyan); box-shadow: 0 0 15px rgba(99,230,226,.23); }
+    .step.done { color: var(--cyan); } .step.done b { background: rgba(99,230,226,.13); border-color: var(--cyan); }
+    .form-step { display: none; } .form-step.active { display: block; animation: enter .35s ease-out; }
+    label { display: block; margin: 19px 0 8px; color: #bac2df; font-size: 13px; font-weight: 600; }
+    input { width: 100%; border: 1px solid var(--line); border-radius: 13px; padding: 14px 15px; color: var(--text); background: rgba(5, 8, 20, .54); outline: none; font: inherit; transition: .2s; }
+    input:focus { border-color: rgba(99,230,226,.75); box-shadow: 0 0 0 4px rgba(99,230,226,.09); }
+    input::placeholder { color: #5d6687; }
+    button { width: 100%; border: 0; border-radius: 13px; margin-top: 23px; padding: 15px; color: #0a0d1c; background: linear-gradient(100deg, var(--cyan), #a7f3d0); cursor: pointer; font: 700 14px "DM Sans", sans-serif; box-shadow: 0 10px 26px rgba(99,230,226,.22); transition: transform .2s, box-shadow .2s, opacity .2s; }
+    button:hover { transform: translateY(-2px); box-shadow: 0 14px 34px rgba(99,230,226,.35); } button:disabled { opacity: .6; cursor: wait; transform: none; }
+    .hint { margin: 15px 0 0; color: #656e91; font-size: 12px; text-align: center; }
+    .status { display: none; align-items: center; gap: 10px; margin-top: 18px; padding: 12px 14px; border: 1px solid rgba(99,230,226,.2); border-radius: 12px; color: var(--cyan); background: rgba(99,230,226,.07); font-size: 13px; line-height: 1.4; }
+    .status.visible { display: flex; } .status.error { color: var(--danger); border-color: rgba(255,141,161,.25); background: rgba(255,141,161,.07); }
+    .spinner { width: 15px; height: 15px; flex: 0 0 15px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spin .7s linear infinite; }
+    footer { margin-top: 20px; color: #565f7e; font-size: 11px; text-align: center; }
+    @keyframes drift { to { transform: translate(7vw, 5vw) scale(1.1); } }
+    @keyframes spin { to { transform: rotate(360deg); } } @keyframes enter { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: none; } }
+    @media (max-width: 480px) { .shell { width: min(100% - 26px, 520px); padding-top: 35px; } .card { padding: 22px; } }
+  </style>
+</head>
+<body>
+  <div class="noise"></div>
+  <main class="shell">
+    <div class="brand"><div class="brand-mark">✦</div><div class="brand-name">insta<span>fast</span></div></div>
+    <div class="eyebrow">Private media workspace</div>
+    <h1>Clone with<br><span style="color:var(--cyan)">confidence.</span></h1>
+    <p class="subtitle">Conecte uma sessão segura e transforme perfis públicos em um arquivo organizado, sem travar sua experiência.</p>
+    <section class="card">
+      <div class="steps">
+        <div class="step active" id="stepLabel1"><b>1</b> Sessão</div>
+        <div class="step" id="stepLabel2"><b>2</b> Clonador</div>
+      </div>
+      <form class="form-step active" id="loginStep">
+        <div class="eyebrow">Autenticação</div>
+        <label for="username">Usuário da Conta Descartável</label>
+        <input id="username" autocomplete="username" placeholder="@seu_usuario" required>
+        <label for="password">Senha</label>
+        <input id="password" type="password" autocomplete="current-password" placeholder="••••••••" required>
+        <button type="submit" id="loginButton">Conectar sessão <span>→</span></button>
+        <p class="hint">Sua senha é usada somente para criar a sessão local.</p>
+        <div class="status" id="loginStatus"><span class="spinner"></span><span></span></div>
+      </form>
+      <form class="form-step" id="downloadStep">
+        <div class="eyebrow">Sessão conectada</div>
+        <label for="profile">Perfil Alvo (@)</label>
+        <input id="profile" placeholder="@perfil_publico" required>
+        <button type="submit" id="downloadButton">Iniciar download <span>↗</span></button>
+        <div class="status" id="downloadStatus"><span class="spinner"></span><span></span></div>
+      </form>
+    </section>
+    <footer>Processamento assíncrono · Seus arquivos vão direto para o storage</footer>
+  </main>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    let sessionUser = "";
+    function setStatus(element, message, error = false) {
+      element.classList.add("visible");
+      element.classList.toggle("error", error);
+      element.querySelector("span:last-child").textContent = message;
+      element.querySelector(".spinner").style.display = error ? "none" : "block";
+    }
+    async function request(path, body) {
+      const response = await fetch(path, { method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body) });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.detail || "Não foi possível concluir a operação.");
+      return data;
+    }
+    $("loginStep").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const button = $("loginButton"), status = $("loginStatus");
+      button.disabled = true; setStatus(status, "Validando e salvando sua sessão...");
+      try {
+        sessionUser = $("username").value.trim().replace(/^@/, "");
+        await request("/api/login", { username: sessionUser, password: $("password").value });
+        $("loginStep").classList.remove("active"); $("downloadStep").classList.add("active");
+        $("stepLabel1").classList.remove("active"); $("stepLabel1").classList.add("done");
+        $("stepLabel2").classList.add("active");
+      } catch (error) { setStatus(status, error.message, true); button.disabled = false; }
+    });
+    $("downloadStep").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const button = $("downloadButton"), status = $("downloadStatus");
+      button.disabled = true; setStatus(status, "Download em segundo plano iniciado...");
+      try {
+        await request("/api/download", { target_profile: $("profile").value.trim(), scraper_username: sessionUser });
+        status.querySelector("span:last-child").textContent = "Download em segundo plano iniciado. Você pode fechar esta página.";
+      } catch (error) { setStatus(status, error.message, true); button.disabled = false; }
+    });
+  </script>
+</body>
+</html>
