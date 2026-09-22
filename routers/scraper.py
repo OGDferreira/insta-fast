@@ -2,6 +2,7 @@ import logging
 import os
 import shutil
 import tempfile
+import threading
 import uuid
 from urllib.parse import urlparse
 
@@ -17,10 +18,18 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+jobs: dict[str, dict[str, str | int]] = {}
+jobs_lock = threading.Lock()
 
 
 class DownloadRequest(BaseModel):
     profile_url: str = Field(min_length=1)
+
+
+def update_job(job_id: str, **values: str | int) -> None:
+    with jobs_lock:
+        if job_id in jobs:
+            jobs[job_id].update(values)
 
 
 def profile_name_from_url(profile_url: str) -> str:
@@ -38,17 +47,19 @@ def profile_name_from_url(profile_url: str) -> str:
     return path_parts[0]
 
 
-def process_download(profile_url: str) -> None:
+def process_download(job_id: str, profile_url: str) -> None:
     temporary_directory: str | None = None
     archive_path: str | None = None
 
     try:
+        update_job(job_id, status="baixando", progress=10, message="Preparando o download...")
         target_profile = profile_name_from_url(profile_url)
 
         supabase_url = os.getenv("SUPABASE_URL")
         supabase_key = os.getenv("SUPABASE_KEY")
         if not supabase_url or not supabase_key:
             logger.error("SUPABASE_URL e SUPABASE_KEY precisam estar configurados")
+            update_job(job_id, status="falhou", progress=0, message="Supabase não está configurado.")
             return
 
         loader = instaloader.Instaloader()
@@ -64,6 +75,12 @@ def process_download(profile_url: str) -> None:
             stories=False,
             fast_update=False,
         )
+        update_job(
+            job_id,
+            status="compactando",
+            progress=70,
+            message="Publicações e legendas baixadas. Criando o arquivo ZIP...",
+        )
 
         archive_base = os.path.join(
             tempfile.gettempdir(), f"insta-fast-{uuid.uuid4().hex}"
@@ -75,6 +92,12 @@ def process_download(profile_url: str) -> None:
         )
 
         supabase = create_client(supabase_url, supabase_key)
+        update_job(
+            job_id,
+            status="enviando",
+            progress=88,
+            message="Enviando o arquivo para o armazenamento seguro...",
+        )
         object_path = f"{target_profile}/{uuid.uuid4().hex}.zip"
         with open(archive_path, "rb") as archive_file:
             supabase.storage.from_("downloads").upload(
@@ -84,14 +107,39 @@ def process_download(profile_url: str) -> None:
             )
 
         logger.info("Download de %s enviado ao Supabase em %s", target_profile, object_path)
+        update_job(
+            job_id,
+            status="concluido",
+            progress=100,
+            message="Download concluído! O arquivo foi enviado com sucesso.",
+        )
     except ValueError as error:
         logger.error("URL de perfil inválida: %s", error)
+        update_job(job_id, status="falhou", progress=0, message=str(error))
     except ProfileNotExistsException:
         logger.exception("Perfil público não encontrado: %s", profile_url)
+        update_job(
+            job_id,
+            status="falhou",
+            progress=0,
+            message="Perfil público não encontrado.",
+        )
     except ConnectionException:
         logger.exception("Falha de conexão ao baixar o perfil: %s", profile_url)
+        update_job(
+            job_id,
+            status="falhou",
+            progress=0,
+            message="O Instagram bloqueou ou interrompeu a conexão.",
+        )
     except Exception:
         logger.exception("Falha inesperada no download de %s", profile_url)
+        update_job(
+            job_id,
+            status="falhou",
+            progress=0,
+            message="Ocorreu um erro durante o download. Consulte os logs do servidor.",
+        )
     finally:
         if archive_path:
             try:
@@ -123,8 +171,31 @@ def download_profile(
             detail=str(error),
         ) from error
 
-    background_tasks.add_task(process_download, request.profile_url)
+    job_id = uuid.uuid4().hex
+    with jobs_lock:
+        jobs[job_id] = {
+            "status": "aguardando",
+            "progress": 0,
+            "message": "Download colocado na fila.",
+        }
+
+    background_tasks.add_task(process_download, job_id, request.profile_url)
     return {
         "status": "processing",
-        "message": "Download de publicações e legendas iniciado em segundo plano.",
+        "message": "Download de publicações e legendas iniciado.",
+        "job_id": job_id,
     }
+
+
+@router.get("/api/download/{job_id}")
+def download_status(job_id: str) -> dict[str, str | int]:
+    with jobs_lock:
+        job = jobs.get(job_id)
+
+    if job is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Download não encontrado ou expirado.",
+        )
+
+    return {"job_id": job_id, **job}

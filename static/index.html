@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#080b18">
-  <title>Insta Fast | Secure Scraper</title>
+  <title>Insta Fast | Downloader público</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
@@ -28,6 +28,7 @@
     input { width:100%; border:1px solid var(--line); border-radius:13px; padding:14px 15px; color:var(--text); background:rgba(5,8,20,.54); outline:none; font:inherit; transition:.2s; } input:focus { border-color:rgba(99,230,226,.75); box-shadow:0 0 0 4px rgba(99,230,226,.09); } input::placeholder { color:#5d6687; }
     button { width:100%; border:0; border-radius:13px; margin-top:23px; padding:15px; color:#0a0d1c; background:linear-gradient(100deg,var(--cyan),var(--success)); cursor:pointer; font:700 14px "DM Sans",sans-serif; box-shadow:0 10px 26px rgba(99,230,226,.22); transition:transform .2s,box-shadow .2s,opacity .2s; } button:hover { transform:translateY(-2px); box-shadow:0 14px 34px rgba(99,230,226,.35); } button:disabled { opacity:.6; cursor:wait; transform:none; }
     .status { display:none; align-items:flex-start; gap:10px; margin-top:18px; padding:13px 14px; border:1px solid rgba(99,230,226,.2); border-radius:12px; color:var(--cyan); background:rgba(99,230,226,.07); font-size:13px; line-height:1.4; } .status.visible { display:flex; } .status.error { color:var(--danger); border-color:rgba(255,141,161,.3); background:rgba(255,141,161,.08); } .status.success { color:var(--success); }
+    .progress-wrap { display:none; margin-top:16px; } .progress-wrap.visible { display:block; } .progress-head { display:flex; justify-content:space-between; margin-bottom:8px; color:var(--muted); font-size:11px; } .progress-value { color:var(--cyan); font-weight:700; } .progress-track { height:8px; overflow:hidden; border-radius:99px; background:rgba(255,255,255,.09); } .progress-bar { width:0; height:100%; border-radius:inherit; background:linear-gradient(90deg,#63e6e2,#a7f3d0); box-shadow:0 0 15px rgba(99,230,226,.65); transition:width .5s ease; }
     .status-icon { width:15px; height:15px; flex:0 0 15px; margin-top:1px; border:2px solid currentColor; border-right-color:transparent; border-radius:50%; animation:spin .7s linear infinite; } .status.error .status-icon { border:0; animation:none; } .status.error .status-icon:after { content:"!"; display:grid; place-items:center; width:15px; height:15px; border:1px solid currentColor; border-radius:50%; font-size:10px; font-weight:700; }
     footer { margin-top:20px; color:#565f7e; font-size:11px; text-align:center; }
     @keyframes drift { to { transform:translate(7vw,5vw) scale(1.1); } } @keyframes spin { to { transform:rotate(360deg); } } @keyframes enter { from { opacity:0; transform:translateY(7px); } to { opacity:1; transform:none; } } .card { animation:enter .45s ease-out; }
@@ -38,8 +39,8 @@
   <div class="noise"></div>
   <main class="shell">
     <div class="brand"><div class="brand-mark">✦</div><div class="brand-name">insta<span>fast</span></div></div>
-    <div class="eyebrow">Private media workspace</div>
-    <h1>Clone with<br><span>confidence.</span></h1>
+    <div class="eyebrow">Baixe mídias públicas</div>
+    <h1>Baixe com<br><span>confiança.</span></h1>
     <p class="subtitle">Baixe publicações públicas e suas legendas em um arquivo organizado, sem travar sua experiência.</p>
     <section class="card">
       <form id="downloadForm" novalidate>
@@ -49,9 +50,13 @@
         <input id="profileUrl" type="url" autocomplete="url" placeholder="https://www.instagram.com/perfil/" required>
         <button type="submit" id="downloadButton">Baixar publicações <span>↗</span></button>
         <div class="status" id="status" role="alert" aria-live="polite"><span class="status-icon"></span><span class="status-message"></span></div>
+        <div class="progress-wrap" id="progressWrap">
+          <div class="progress-head"><span id="progressMessage">Aguardando...</span><span class="progress-value" id="progressValue">0%</span></div>
+          <div class="progress-track"><div class="progress-bar" id="progressBar"></div></div>
+        </div>
       </form>
     </section>
-    <footer>Processamento assíncrono · Seus arquivos vão direto para o storage</footer>
+    <footer>Processamento em segundo plano · Seus arquivos vão direto para o armazenamento</footer>
   </main>
   <script>
     const form = document.getElementById("downloadForm");
@@ -59,6 +64,11 @@
     const button = document.getElementById("downloadButton");
     const statusBox = document.getElementById("status");
     const statusMessage = statusBox.querySelector(".status-message");
+    const progressWrap = document.getElementById("progressWrap");
+    const progressBar = document.getElementById("progressBar");
+    const progressValue = document.getElementById("progressValue");
+    const progressMessage = document.getElementById("progressMessage");
+    let statusTimer;
     function showStatus(message, kind) {
       statusBox.className = `status visible ${kind}`;
       statusMessage.textContent = message;
@@ -75,19 +85,48 @@
       if (!response.ok) throw new Error(data.detail || data.message || `O servidor retornou um erro (${response.status}).`);
       return data;
     }
+    async function updateProgress(jobId) {
+      try {
+        const response = await fetch(`/api/download/${encodeURIComponent(jobId)}`);
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.detail || "Não foi possível consultar o andamento.");
+        const progress = Number(data.progress) || 0;
+        progressBar.style.width = `${progress}%`;
+        progressValue.textContent = `${progress}%`;
+        progressMessage.textContent = data.message || "Processando...";
+        if (data.status === "concluido") {
+          showStatus(data.message, "success");
+          button.disabled = false;
+          return;
+        }
+        if (data.status === "falhou") {
+          showStatus(data.message, "error");
+          button.disabled = false;
+          return;
+        }
+        statusTimer = setTimeout(() => updateProgress(jobId), 1500);
+      } catch (error) {
+        showStatus(error.message || "Não foi possível consultar o andamento.", "error");
+        button.disabled = false;
+      }
+    }
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
       const url = profileUrl.value.trim();
       if (!url) { showStatus("Informe a URL de um perfil público do Instagram.", "error"); return; }
       button.disabled = true;
       showStatus("Validando dados e iniciando download em segundo plano...", "loading");
+      progressWrap.classList.add("visible");
+      progressBar.style.width = "0%";
+      progressValue.textContent = "0%";
+      progressMessage.textContent = "Colocando o download na fila...";
       try {
         const data = await sendDownload({ profile_url:url });
         form.reset();
-        showStatus(data.message || "Download iniciado em segundo plano. Você já pode fechar esta página.", "success");
+        showStatus(data.message || "Download iniciado. Acompanhe o andamento abaixo.", "loading");
+        updateProgress(data.job_id);
       } catch (error) {
         showStatus(error.message || "Ocorreu um erro inesperado. Tente novamente.", "error");
-      } finally {
         button.disabled = false;
       }
     });
