@@ -32,6 +32,11 @@ def update_job(job_id: str, **values: str | int) -> None:
             jobs[job_id].update(values)
 
 
+def is_rate_limit_error(error: Exception) -> bool:
+    message = str(error).lower()
+    return "429" in message or "too many requests" in message
+
+
 def profile_name_from_url(profile_url: str) -> str:
     parsed_url = urlparse(profile_url.strip())
     if parsed_url.scheme not in {"http", "https"} or parsed_url.netloc.lower() not in {
@@ -62,7 +67,18 @@ def process_download(job_id: str, profile_url: str) -> None:
             update_job(job_id, status="falhou", progress=0, message="Supabase não está configurado.")
             return
 
-        loader = instaloader.Instaloader()
+        update_job(
+            job_id,
+            status="baixando",
+            progress=15,
+            message="Consultando o perfil público no Instagram...",
+        )
+        loader = instaloader.Instaloader(
+            sleep=False,
+            max_connection_attempts=1,
+            request_timeout=60,
+            fatal_status_codes=[429],
+        )
         temporary_directory = tempfile.mkdtemp(prefix="insta-fast-")
         loader.dirname_pattern = os.path.join(temporary_directory, "{target}")
         loader.download_profile(
@@ -119,7 +135,23 @@ def process_download(job_id: str, profile_url: str) -> None:
             progress=0,
             message="Perfil público não encontrado.",
         )
-    except ConnectionException:
+    except ConnectionException as error:
+        if is_rate_limit_error(error):
+            logger.error(
+                "Instagram aplicou limite de requisições (HTTP 429) para %s",
+                profile_url,
+            )
+            update_job(
+                job_id,
+                status="falhou",
+                progress=0,
+                message=(
+                    "O Instagram limitou novas consultas temporariamente. "
+                    "Aguarde alguns minutos e tente novamente."
+                ),
+            )
+            return
+
         logger.exception("Falha de conexão ao baixar o perfil: %s", profile_url)
         update_job(
             job_id,
