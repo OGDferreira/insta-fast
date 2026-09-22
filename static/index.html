@@ -40,16 +40,14 @@
     <div class="brand"><div class="brand-mark">✦</div><div class="brand-name">insta<span>fast</span></div></div>
     <div class="eyebrow">Private media workspace</div>
     <h1>Clone with<br><span>confidence.</span></h1>
-    <p class="subtitle">Use um cookie de sessão seguro para transformar um perfil público em um arquivo organizado, sem travar sua experiência.</p>
+    <p class="subtitle">Baixe publicações públicas e suas legendas em um arquivo organizado, sem travar sua experiência.</p>
     <section class="card">
       <form id="downloadForm" novalidate>
-        <div class="eyebrow">Download seguro</div>
-        <label for="profile">Perfil Alvo (@)</label>
-        <input id="profile" autocomplete="off" placeholder="@perfil_publico" required>
-        <label for="sessionid">Cookie (sessionid) da Conta Descartável</label>
-        <p class="helper">Faça login no navegador, abra Inspecionar (F12) → Application → Cookies e copie o valor de <strong>sessionid</strong>.</p>
-        <input id="sessionid" type="password" autocomplete="off" placeholder="Cole o valor do sessionid" required>
-        <button type="submit" id="downloadButton">Iniciar download <span>↗</span></button>
+        <div class="eyebrow">Download público</div>
+        <label for="profileUrl">URL do perfil Instagram</label>
+        <p class="helper">Cole a URL completa de um perfil público, por exemplo: instagram.com/perfil</p>
+        <input id="profileUrl" type="url" autocomplete="url" placeholder="https://www.instagram.com/perfil/" required>
+        <button type="submit" id="downloadButton">Baixar publicações <span>↗</span></button>
         <div class="status" id="status" role="alert" aria-live="polite"><span class="status-icon"></span><span class="status-message"></span></div>
       </form>
     </section>
@@ -57,8 +55,7 @@
   </main>
   <script>
     const form = document.getElementById("downloadForm");
-    const profile = document.getElementById("profile");
-    const sessionid = document.getElementById("sessionid");
+    const profileUrl = document.getElementById("profileUrl");
     const button = document.getElementById("downloadButton");
     const statusBox = document.getElementById("status");
     const statusMessage = statusBox.querySelector(".status-message");
@@ -80,13 +77,12 @@
     }
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
-      const target = profile.value.trim();
-      const cookie = sessionid.value.trim();
-      if (!target || !cookie) { showStatus("Preencha o perfil alvo e o cookie sessionid.", "error"); return; }
+      const url = profileUrl.value.trim();
+      if (!url) { showStatus("Informe a URL de um perfil público do Instagram.", "error"); return; }
       button.disabled = true;
       showStatus("Validando dados e iniciando download em segundo plano...", "loading");
       try {
-        const data = await sendDownload({ target_profile:target, sessionid:cookie });
+        const data = await sendDownload({ profile_url:url });
         form.reset();
         showStatus(data.message || "Download iniciado em segundo plano. Você já pode fechar esta página.", "success");
       } catch (error) {
