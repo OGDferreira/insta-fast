@@ -68,11 +68,6 @@ def process_download(job_id: str, profile_url: str) -> None:
         loader.download_profile(
             target_profile,
             profile_pic=False,
-            posts=True,
-            tagged=False,
-            igtv=False,
-            highlights=False,
-            stories=False,
             fast_update=False,
         )
         update_job(
